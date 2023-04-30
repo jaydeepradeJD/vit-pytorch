@@ -1,33 +1,207 @@
 import numpy as np
 import torch
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
+from data import ProteinDataset, ProteinAutoEncoderDataset
+from config import cfg
+import utils.data_transforms
+from trainer import Model
 
-import torch
-from vit_pytorch import ViT, MAE
+def main(cfg):
+    if not os.path.exists(cfg.DIR.OUT_PATH):
+        os.makedirs(cfg.DIR.OUT_PATH)
+        # Set up data augmentation
+    IMG_SIZE = cfg.CONST.IMG_H, cfg.CONST.IMG_W
+	
+    train_transforms = utils.data_transforms.Compose([
+        utils.data_transforms.ResizeV2(IMG_SIZE),
+        utils.data_transforms.ToTensorV2(),
+        ])
+    val_transforms = utils.data_transforms.Compose([
+        utils.data_transforms.ResizeV2(IMG_SIZE),
+        utils.data_transforms.ToTensorV2(),
+        ]) 
 
-v = ViT(
-    image_size = 256,
-    patch_size = 32,
-    num_classes = 1000,
-    dim = 1024,
-    depth = 6,
-    heads = 8,
-    mlp_dim = 2048
-)
+    train_dataset = ProteinAutoEncoderDataset('train', train_transforms, background=cfg.DATASET.BACKGROUND)
+    val_dataset = ProteinAutoEncoderDataset('val', val_transforms, background=cfg.DATASET.BACKGROUND)
+    # test_dataset = ProteinAutoEncoderDataset('test', test_transforms)
 
-mae = MAE(
-    encoder = v,
-    masking_ratio = 0.75,   # the paper recommended 75% masked patches
-    decoder_dim = 512,      # paper showed good results with just 512
-    decoder_depth = 6       # anywhere from 1 to 8
-)
+    # Set up Dataloader
+	train_data_loader = torch.utils.data.DataLoader(dataset=train_dataset,
+													batch_size=cfg.CONST.BATCH_SIZE,
+													num_workers=cfg.CONST.NUM_WORKER,
+													shuffle=True,
+													drop_last=True)
+	val_data_loader = torch.utils.data.DataLoader(dataset=val_dataset,
+												  batch_size=cfg.CONST.BATCH_SIZE,
+												  num_workers=cfg.CONST.NUM_WORKER,
+												  shuffle=False)
+	# if test_dataset is not None:
+	# 	test_data_loader = torch.utils.data.DataLoader(dataset=test_dataset,
+	# 											  batch_size=1,
+	# 											  num_workers=1,
+	# 											  shuffle=False)
 
-images = torch.randn(8, 3, 256, 256)
+	# Initiate the Model
 
-loss = mae(images)
-loss.backward()
+	if cfg.DATASET.AUTOENCODER:
+		model = AutoEncoder(cfg)
 
-# that's all!
-# do the above in a for loop many times with a lot of images and your vision transformer will learn
+	if not cfg.DATASET.AUTOENCODER:
+		if cfg.DIR.AE_WEIGHTS is not None:
+			ae = AutoEncoder_old.load_from_checkpoint(cfg.DIR.AE_WEIGHTS, cfg=cfg)
+			ae.eval()
+			model = PretrainedAE_Model(cfg, pretrained_model=ae)
+		else:
+			model = Model(cfg)
+	# model = OnlySeqModel(cfg)
+	
+	# Initiate the trainer
+	logger = pl.loggers.TensorBoardLogger(cfg.DIR.OUT_PATH, name=cfg.DIR.EXPERIMENT_NAME)
 
-# save your improved vision transformer
-torch.save(v.state_dict(), './trained-vit.pt')
+	wandb_logger = pl.loggers.WandbLogger(name=cfg.DIR.EXPERIMENT_NAME,
+										project=cfg.DIR.PROJECT_NAME, dir=cfg.DIR.OUT_PATH)
+
+	checkpoint = ModelCheckpoint(monitor='val/loss',
+								 dirpath=logger.log_dir, 
+								 filename='{epoch}-{step}',
+								 mode='min', 
+								 save_last=True)
+
+	trainer = pl.Trainer(devices=cfg.TRAIN.GPU, 
+		      			 num_nodes=1,
+						 accelerator='gpu', 
+						 # strategy='ddp',
+						 callbacks=[checkpoint],
+						 logger=[logger, wandb_logger], 
+						 max_epochs=cfg.CONST.NUM_EPOCHS, 
+						 default_root_dir=cfg.DIR.OUT_PATH, 
+						 fast_dev_run=cfg.TRAIN.DEBUG)
+
+	# Training
+	
+	trainer.fit(model, train_data_loader, val_data_loader, ckpt_path=cfg.DIR.WEIGHTS)
+
+
+
+    images = torch.randn(8, 3, 256, 256)
+
+    loss = mae(images)
+    loss.backward()
+
+    # that's all!
+    # do the above in a for loop many times with a lot of images and your vision transformer will learn
+
+    # save your improved vision transformer
+    torch.save(v.state_dict(), './trained-vit.pt')
+
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser(description='Vision Language Models')
+	parser.add_argument('--save_dir', default='./logs/',
+						type=str,help='path to directory for storing the checkpoints etc.')
+	parser.add_argument('-b','--batch_size', default=32, type=int,
+						help='Batch size')
+	parser.add_argument('-ep','--n_epochs', default=100, type=int,
+						help='Number of epochs')
+	parser.add_argument('-g','--gpu', default=1, type=int,
+						help='num gpus')
+	parser.add_argument('--num_workers', default=8, type=int,
+						help='num workers for data module.')
+	parser.add_argument('-d', '--debug', action='store_true',
+						help='fast_dev_run argument')
+	parser.add_argument('--weights', dest='weights',
+						help='Initialize network from the weights file', default=None)
+	parser.add_argument('--n_views', dest='n_views_rendering',
+						help='number of views used', default=5, type=int)
+	parser.add_argument('--loss', dest='loss',
+						help='Loss Function', default='bce', type=str)
+	parser.add_argument('--lr', dest='lr',
+						help='Learning Rate', default=None, type=float)
+	
+	parser.add_argument('--l2_penalty', dest='l2_penalty',
+						help='L2 penalty Weight decay', default=None, type=float)
+	parser.add_argument('--optim', dest='optim',
+						help='Optimizer/Training Policy', default='adam', type=str)
+	parser.add_argument('--rep', dest='rep',
+						help='Protein representation', default='surface_with_inout', type=str)
+	parser.add_argument('--gray', dest='gray',
+						help='If the input images are grayscale', action='store_true')
+	parser.add_argument('--inp_size', dest='inp_size',
+						help='input image resolution ', default=224, type=int)
+	parser.add_argument('--name', dest='name',
+						help='Experiment Name', default=None, type=str)
+	parser.add_argument('--proj_name', dest='proj_name',
+						help='Project Name', default=None, type=str)
+	parser.add_argument('-ae', '--ae', action='store_true',
+						help='If training AutoEncoder')
+	parser.add_argument('-bg', '--bg', action='store_true',
+						help='Use images with added background')
+	parser.add_argument('--ae_weights', dest='ae_weights',
+						help='Initialize Encoder network from the weights file', default=None)
+	parser.add_argument('-gn', '--gn', action='store_true',
+						help='Use Group Normalization')
+	
+	args = parser.parse_args()
+		
+	if args.save_dir is not None:
+		cfg.DIR.OUT_PATH  = args.save_dir
+	if args.debug:
+		cfg.TRAIN.DEBUG = True
+
+	if args.gpu is not None:
+		cfg.TRAIN.GPU = args.gpu
+
+	if args.num_workers is not None:
+		cfg.CONST.NUM_WORKER  = args.num_workers
+
+	if args.batch_size is not None:
+		cfg.CONST.BATCH_SIZE = args.batch_size
+	
+	if args.n_epochs is not None:
+		cfg.CONST.NUM_EPOCHS = args.n_epochs
+			
+
+	if args.n_views_rendering is not None:
+		cfg.CONST.N_VIEWS_RENDERING = args.n_views_rendering
+	
+	if args.rep is not None:
+		cfg.CONST.REP = args.rep
+	if args.rep == 'surface_with_inout_fixed_views':
+		cfg.CONST.N_VIEWS_RENDERING = 6
+
+
+	if args.optim is not None:
+		cfg.TRAIN.OPTIM = args.optim
+
+	if args.l2_penalty is not None:
+		cfg.TRAIN.L2_PENALTY = args.l2_penalty
+	
+	if args.lr is not None:
+		cfg.TRAIN.LEARNING_RATE = args.lr
+
+	if args.gray:
+		cfg.DATASET.GRAYSCALE = True
+	if args.loss is not None:
+		cfg.TRAIN.LOSS = args.loss
+
+	if args.inp_size is not None:
+		cfg.CONST.IMG_W = args.inp_size
+		cfg.CONST.IMG_H = args.inp_size
+	if args.weights is not None:
+		cfg.DIR.WEIGHTS = args.weights
+	if args.ae_weights is not None:
+		cfg.DIR.AE_WEIGHTS = args.ae_weights
+		
+	if args.name is not None:
+		cfg.DIR.EXPERIMENT_NAME = args.name
+	if args.proj_name is not None:
+		cfg.DIR.PROJECT_NAME = args.proj_name
+	
+	if args.ae:
+		cfg.DATASET.AUTOENCODER = True
+
+	if args.bg:
+		cfg.DATASET.BACKGROUND = True
+	if args.gn:
+		cfg.NETWORK.GROUP_NORM = True
+	main(cfg)
