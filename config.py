@@ -29,7 +29,7 @@ __C.CONST.REP                               = 'surface_with_inout' # Represnetat
 __C.DIR                                     = edict()
 __C.DIR.OUT_PATH                            = './logs'
 __C.DIR.EXPERIMENT_NAME                     = 'experiment1'
-__C.DIR.PROJECT_NAME                        = 'Vision_Language_Protein'
+__C.DIR.PROJECT_NAME                        = 'Masked_AutoEncoder'
 __C.DIR.WEIGHTS                             = None
 __C.DIR.AE_WEIGHTS                          = None
 #

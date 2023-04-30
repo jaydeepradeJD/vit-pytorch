@@ -24,38 +24,24 @@ class Model(pl.LightningModule):
 		self.loss = torch.nn.BCELoss()
 
 	def forward(self, img):
-		img_features = self.encoder(imgs)
-		# batch_size,320,4,4,4 or batch_size,160,4,4,4
-		emd_features = self.mlp(seq_emd)
-		# batch_size,1280
-		emd_features = emd_features.view(-1, 80, 4, 4)
-		combined_features = torch.cat([img_features, emd_features], dim=1)
-		predicted = self.decoder(combined_features)
-
-		return predicted
+		loss = self.mae(img)
+		return loss
 
 	def training_step(self, batch, batch_idx):
-		imgs, seq_emd, target = batch 
-		
-		predicted = self.forward(imgs, seq_emd)
-		
-		loss = self.loss(predicted, target)
+		imgs = batch 
+		loss = self.forward(imgs)
 		self.log_dict({'train/loss':loss})
 		return loss
 	
 	def validation_step(self, batch, batch_idx):
-		imgs, seq_emd, target = batch 
-		
-		predicted = self.forward(imgs, seq_emd)
-		loss = self.loss(predicted, target)
+		imgs = batch 
+		loss = self.forward(imgs)
 		self.log_dict({'val/loss':loss})
 		return loss
 	
 	def configure_optimizers(self):                         
 		lr = self.cfg.TRAIN.LEARNING_RATE
-		opt = torch.optim.Adam(list(self.encoder.parameters())+
-			list(self.decoder.parameters())+
-			list(self.mlp.parameters()), lr)
+		opt = torch.optim.Adam(list(self.mae.parameters()), lr)
 			  
 		return opt
 

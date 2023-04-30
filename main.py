@@ -43,18 +43,7 @@ def main(cfg):
 	# 											  shuffle=False)
 
 	# Initiate the Model
-
-	if cfg.DATASET.AUTOENCODER:
-		model = AutoEncoder(cfg)
-
-	if not cfg.DATASET.AUTOENCODER:
-		if cfg.DIR.AE_WEIGHTS is not None:
-			ae = AutoEncoder_old.load_from_checkpoint(cfg.DIR.AE_WEIGHTS, cfg=cfg)
-			ae.eval()
-			model = PretrainedAE_Model(cfg, pretrained_model=ae)
-		else:
-			model = Model(cfg)
-	# model = OnlySeqModel(cfg)
+    model = Model(cfg)
 	
 	# Initiate the trainer
 	logger = pl.loggers.TensorBoardLogger(cfg.DIR.OUT_PATH, name=cfg.DIR.EXPERIMENT_NAME)
@@ -71,7 +60,7 @@ def main(cfg):
 	trainer = pl.Trainer(devices=cfg.TRAIN.GPU, 
 		      			 num_nodes=1,
 						 accelerator='gpu', 
-						 # strategy='ddp',
+						 strategy='ddp',
 						 callbacks=[checkpoint],
 						 logger=[logger, wandb_logger], 
 						 max_epochs=cfg.CONST.NUM_EPOCHS, 
@@ -83,20 +72,8 @@ def main(cfg):
 	trainer.fit(model, train_data_loader, val_data_loader, ckpt_path=cfg.DIR.WEIGHTS)
 
 
-
-    images = torch.randn(8, 3, 256, 256)
-
-    loss = mae(images)
-    loss.backward()
-
-    # that's all!
-    # do the above in a for loop many times with a lot of images and your vision transformer will learn
-
-    # save your improved vision transformer
-    torch.save(v.state_dict(), './trained-vit.pt')
-
 if __name__ == '__main__':
-	parser = argparse.ArgumentParser(description='Vision Language Models')
+	parser = argparse.ArgumentParser(description='Masked AutoEncoder')
 	parser.add_argument('--save_dir', default='./logs/',
 						type=str,help='path to directory for storing the checkpoints etc.')
 	parser.add_argument('-b','--batch_size', default=32, type=int,
@@ -105,7 +82,7 @@ if __name__ == '__main__':
 						help='Number of epochs')
 	parser.add_argument('-g','--gpu', default=1, type=int,
 						help='num gpus')
-	parser.add_argument('--num_workers', default=8, type=int,
+	parser.add_argument('--num_workers', default=1, type=int,
 						help='num workers for data module.')
 	parser.add_argument('-d', '--debug', action='store_true',
 						help='fast_dev_run argument')
