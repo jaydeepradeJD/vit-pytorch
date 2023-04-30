@@ -1,4 +1,6 @@
+import os
 import numpy as np
+import argparse
 import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -8,25 +10,25 @@ import utils.data_transforms
 from trainer import Model
 
 def main(cfg):
-    if not os.path.exists(cfg.DIR.OUT_PATH):
-        os.makedirs(cfg.DIR.OUT_PATH)
-        # Set up data augmentation
-    IMG_SIZE = cfg.CONST.IMG_H, cfg.CONST.IMG_W
+	if not os.path.exists(cfg.DIR.OUT_PATH):
+		os.makedirs(cfg.DIR.OUT_PATH)
+		# Set up data augmentation
+	IMG_SIZE = cfg.CONST.IMG_H, cfg.CONST.IMG_W
 	
-    train_transforms = utils.data_transforms.Compose([
-        utils.data_transforms.ResizeV2(IMG_SIZE),
-        utils.data_transforms.ToTensorV2(),
-        ])
-    val_transforms = utils.data_transforms.Compose([
-        utils.data_transforms.ResizeV2(IMG_SIZE),
-        utils.data_transforms.ToTensorV2(),
-        ]) 
+	train_transforms = utils.data_transforms.Compose([
+		utils.data_transforms.ResizeV2(IMG_SIZE),
+		utils.data_transforms.ToTensorV2(),
+		])
+	val_transforms = utils.data_transforms.Compose([
+		utils.data_transforms.ResizeV2(IMG_SIZE),
+		utils.data_transforms.ToTensorV2(),
+		]) 
 
-    train_dataset = ProteinAutoEncoderDataset('train', train_transforms, background=cfg.DATASET.BACKGROUND)
-    val_dataset = ProteinAutoEncoderDataset('val', val_transforms, background=cfg.DATASET.BACKGROUND)
-    # test_dataset = ProteinAutoEncoderDataset('test', test_transforms)
+	train_dataset = ProteinAutoEncoderDataset('train', train_transforms, background=cfg.DATASET.BACKGROUND)
+	val_dataset = ProteinAutoEncoderDataset('val', val_transforms, background=cfg.DATASET.BACKGROUND)
+	# test_dataset = ProteinAutoEncoderDataset('test', test_transforms)
 
-    # Set up Dataloader
+	# Set up Dataloader
 	train_data_loader = torch.utils.data.DataLoader(dataset=train_dataset,
 													batch_size=cfg.CONST.BATCH_SIZE,
 													num_workers=cfg.CONST.NUM_WORKER,
@@ -43,7 +45,7 @@ def main(cfg):
 	# 											  shuffle=False)
 
 	# Initiate the Model
-    model = Model(cfg)
+	model = Model(cfg)
 	
 	# Initiate the trainer
 	logger = pl.loggers.TensorBoardLogger(cfg.DIR.OUT_PATH, name=cfg.DIR.EXPERIMENT_NAME)
@@ -58,9 +60,9 @@ def main(cfg):
 								 save_last=True)
 
 	trainer = pl.Trainer(devices=cfg.TRAIN.GPU, 
-		      			 num_nodes=1,
+			  			 num_nodes=1,
 						 accelerator='gpu', 
-						 strategy='ddp',
+						 #strategy='ddp',
 						 callbacks=[checkpoint],
 						 logger=[logger, wandb_logger], 
 						 max_epochs=cfg.CONST.NUM_EPOCHS, 

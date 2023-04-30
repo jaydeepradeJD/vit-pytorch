@@ -16,7 +16,7 @@ export PL_TORCH_DISTRIBUTED_BACKEND=gloo
 # LOAD MODULES, INSERT CODE, AND RUN YOUR PROGRAMS HERE
 
 module load miniconda3/4.10.3-svrr7oe
-source activate DLRG_Lightning
+source activate transformers
 
 ###### Masked AutoEncoder ######
 python main.py -d -g 2 --num_workers 1 -ep 100 --proj_name Masked_AutoEncoder --name MAE_WithoutBackground_bs128_ep100 -ae -b 128
